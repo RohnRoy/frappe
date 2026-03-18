@@ -186,6 +186,91 @@ class TestHooks(IntegrationTestCase):
 			os.listdir(frappe.get_app_path(app, "fixtures")),
 		)
 
+	def test_fixture_split_by_dt(self):
+		"""When fixture_split_by_dt is enabled, Custom Field (which has a dt field)
+		should be exported into a directory with one JSON file per parent DocType."""
+		import os
+		import shutil
+
+		from frappe import hooks
+		from frappe.utils.fixtures import export_fixtures, import_fixtures
+
+		app = "frappe"
+		fixtures_path = frappe.get_app_path(app, "fixtures")
+		if os.path.isdir(fixtures_path):
+			shutil.rmtree(fixtures_path)
+
+		hooks.fixtures = [{"dt": "Custom Field"}]
+		hooks.fixture_auto_order = False
+		hooks.fixture_split_by_dt = True
+
+		if frappe._load_app_hooks in frappe.local.request_cache.keys():
+			del frappe.local.request_cache[frappe._load_app_hooks]
+
+		export_fixtures(app)
+
+		split_dir = os.path.join(fixtures_path, "custom_field")
+		flat_file = os.path.join(fixtures_path, "custom_field.json")
+
+		# A directory should have been created, not a flat file
+		self.assertTrue(os.path.isdir(split_dir), "Expected custom_field/ directory to exist")
+		self.assertFalse(os.path.isfile(flat_file), "Flat custom_field.json should not exist")
+
+		# The directory should contain JSON files (unless no Custom Fields exist,
+		# in which case the directory may be empty — that's acceptable)
+		json_files = [f for f in os.listdir(split_dir) if f.endswith(".json")]
+		if frappe.get_all("Custom Field", limit=1):
+			self.assertGreater(len(json_files), 0, "Expected at least one per-dt JSON file")
+
+		# Verify import_fixtures can read the split directory without errors
+		import_fixtures(app)
+
+		# Cleanup
+		shutil.rmtree(fixtures_path)
+
+		# Reset hooks
+		hooks.fixture_split_by_dt = False
+		if frappe._load_app_hooks in frappe.local.request_cache.keys():
+			del frappe.local.request_cache[frappe._load_app_hooks]
+
+	def test_fixture_split_fallback_no_dt_field(self):
+		"""When fixture_split_by_dt is enabled but the DocType has no dt field,
+		it should fall back to a flat JSON file instead of creating a directory."""
+		import os
+		import shutil
+
+		from frappe import hooks
+		from frappe.utils.fixtures import export_fixtures
+
+		app = "frappe"
+		fixtures_path = frappe.get_app_path(app, "fixtures")
+		if os.path.isdir(fixtures_path):
+			shutil.rmtree(fixtures_path)
+
+		hooks.fixtures = [{"dt": "Role"}]
+		hooks.fixture_auto_order = False
+		hooks.fixture_split_by_dt = True
+
+		if frappe._load_app_hooks in frappe.local.request_cache.keys():
+			del frappe.local.request_cache[frappe._load_app_hooks]
+
+		export_fixtures(app)
+
+		flat_file = os.path.join(fixtures_path, "role.json")
+		split_dir = os.path.join(fixtures_path, "role")
+
+		# Should produce a flat file since Role has no "dt" field
+		self.assertTrue(os.path.isfile(flat_file), "Expected role.json flat file for fallback")
+		self.assertFalse(os.path.isdir(split_dir), "role/ directory should not exist for fallback")
+
+		# Cleanup
+		shutil.rmtree(fixtures_path)
+
+		# Reset hooks
+		hooks.fixture_split_by_dt = False
+		if frappe._load_app_hooks in frappe.local.request_cache.keys():
+			del frappe.local.request_cache[frappe._load_app_hooks]
+
 
 class TestDocEventHandlerSignature(UnitTestCase):
 	# `_accepts_method_argument` inspects a doc_events handler's signature to decide

@@ -424,34 +424,7 @@ def import_doc(path, pre_process=None, sort=False):
 			raise NotImplementedError("Only .json files can be imported")
 
 
-def export_json(doctype, path, filters=None, or_filters=None, name=None, order_by="creation asc"):
-	def post_process(out):
-		# Note on Tree DocTypes:
-		# The tree structure is maintained in the database via the fields "lft"
-		# and "rgt". They are automatically set and kept up-to-date. Importing
-		# them would destroy any existing tree structure. For this reason they
-		# are not exported as well.
-		del_keys = ("modified_by", "creation", "owner", "idx", "lft", "rgt")
-		for doc in out:
-			for key in del_keys:
-				if key in doc:
-					del doc[key]
-			for v in doc.values():
-				if isinstance(v, list):
-					for child in v:
-						for key in (
-							*del_keys,
-							"docstatus",
-							"doctype",
-							"modified",
-							"name",
-							"parent",
-							"parentfield",
-							"parenttype",
-						):
-							if key in child:
-								del child[key]
-
+def export_json(doctype, path, filters=None, or_filters=None, name=None, order_by="name asc"):
 	out = []
 	if name:
 		out.append(frappe.get_doc(doctype, name).as_dict())
@@ -467,7 +440,10 @@ def export_json(doctype, path, filters=None, or_filters=None, name=None, order_b
 			order_by=order_by,
 		):
 			out.append(frappe.get_doc(doctype, doc.name).as_dict())
-	post_process(out)
+
+	from frappe.utils.fixtures import post_process_fixture_docs
+
+	post_process_fixture_docs(out)
 
 	dirname = os.path.dirname(path)
 	if not os.path.exists(dirname):
