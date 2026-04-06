@@ -30,7 +30,9 @@ frappe.Application = class Application {
 		this.startup();
 	}
 
-	startup() {
+	async startup() {
+		// Wait for translations to be loaded before rendering any UI
+		if (frappe._translations_loaded) await frappe._translations_loaded;
 		frappe.realtime.init();
 		frappe.model.init();
 
@@ -287,6 +289,7 @@ frappe.Application = class Application {
 		} else {
 			this.set_as_guest();
 		}
+		frappe.ui.toolbar.fetch_session_defaults();
 	}
 
 	setup_workspaces() {
@@ -377,17 +380,15 @@ frappe.Application = class Application {
 	logout() {
 		var me = this;
 		me.logged_out = true;
-		frappe.confirm(__("Are you sure you want to log out?"), function () {
-			return frappe.call({
-				method: "logout",
-				callback: function (r) {
-					if (r.exc) {
-						return;
-					}
+		return frappe.call({
+			method: "logout",
+			callback: function (r) {
+				if (r.exc) {
+					return;
+				}
 
-					me.redirect_to_login();
-				},
-			});
+				me.redirect_to_login();
+			},
 		});
 	}
 	handle_session_expired() {
